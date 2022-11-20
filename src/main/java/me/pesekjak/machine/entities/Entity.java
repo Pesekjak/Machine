@@ -47,8 +47,10 @@ public abstract class Entity implements Identity, ServerProperty, NBTSerializabl
     private boolean hasVisualFire;
     @Getter @Setter
     private int ticksFrozen;
-    @Getter @Setter
+    @Getter
     private Location location;
+    @Getter
+    private Location previousLocation;
     @Getter @Setter
     private float fallDistance;
     @Getter @Setter
@@ -101,6 +103,13 @@ public abstract class Entity implements Identity, ServerProperty, NBTSerializabl
 
     public World getWorld() {
         return location.getWorld();
+    }
+
+    public void setLocation(Location location) {
+        if (location.getWorld() == null)
+            location.setWorld(getWorld());
+        this.previousLocation = this.location;
+        this.location = location;
     }
 
     public Set<String> getTags() {

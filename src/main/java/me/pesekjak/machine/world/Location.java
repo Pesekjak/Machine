@@ -1,18 +1,15 @@
 package me.pesekjak.machine.world;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.With;
-import me.pesekjak.machine.chunk.Chunk;
+import me.pesekjak.machine.utils.FriendlyByteBuf;
 import me.pesekjak.machine.utils.Writable;
 import me.pesekjak.machine.utils.math.Vector3;
-import me.pesekjak.machine.utils.FriendlyByteBuf;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * Represents the location in the world
  */
-@AllArgsConstructor(staticName = "of")
 @Data
 @With
 public class Location implements Cloneable, Writable {
@@ -21,12 +18,13 @@ public class Location implements Cloneable, Writable {
     private float yaw, pitch;
     private World world;
 
-    public static Location of(double x, double y, double z, World world) {
-        return new Location(x, y, z, world);
-    }
-
-    public static Location of(BlockPosition blockPosition, World world) {
-        return new Location(blockPosition, world);
+    public Location(double x, double y, double z, float yaw, float pitch, World world) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.yaw = fixYaw(yaw);
+        this.pitch = pitch;
+        this.world = world;
     }
 
     public Location(double x, double y, double z, World world) {
@@ -37,6 +35,18 @@ public class Location implements Cloneable, Writable {
         this(blockPosition.getX(), blockPosition.getY(), blockPosition.getZ(), world);
     }
 
+    public static Location of(double x, double y, double z, float yaw, float pitch, World world) {
+        return new Location(x, y, z, yaw, pitch, world);
+    }
+
+    public static Location of(double x, double y, double z, World world) {
+        return new Location(x, y, z, world);
+    }
+
+    public static Location of(BlockPosition blockPosition, World world) {
+        return new Location(blockPosition, world);
+    }
+
     @Override
     public Location clone() {
         try {
@@ -45,6 +55,10 @@ public class Location implements Cloneable, Writable {
         catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public void setYaw(float yaw) {
+        this.yaw = fixYaw(yaw);
     }
 
     /**
@@ -173,4 +187,22 @@ public class Location implements Cloneable, Writable {
         writePos(buf);
         writeRot(buf);
     }
+
+    private static float fixYaw(float yaw) {
+        yaw = yaw % 360;
+        if (yaw < -180.0F) {
+            yaw += 360.0F;
+        } else if (yaw > 180.0F) {
+            yaw -= 360.0F;
+        }
+        return yaw;
+    }
+
+    public static boolean isInvalid(Location location) {
+        double x = location.getX(), y = location.getY(), z = location.getZ();
+        if (!(Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)))
+            return true;
+        return Math.max(Math.abs(x), Math.abs(z)) > 3.2e+7;
+    }
+
 }

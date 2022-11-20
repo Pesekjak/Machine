@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 /**
  * Connection of the Machine server
@@ -95,6 +96,15 @@ public class ServerConnection extends Thread implements ServerProperty, AutoClos
     public void broadcastPacket(PacketOut packet) throws IOException {
         ClientConnection.ClientState state = ClientConnection.ClientState.fromState(PacketFactory.getStateFromPacket(packet.getClass()));
         for(ClientConnection client : clients) {
+            if(client.getClientState() == state) client.sendPacket(packet);
+        }
+    }
+
+    public void broadcastPacket(PacketOut packet, Predicate<ClientConnection> predicate) throws IOException {
+        ClientConnection.ClientState state = ClientConnection.ClientState.fromState(PacketFactory.getStateFromPacket(packet.getClass()));
+        for(ClientConnection client : clients) {
+            if (!predicate.test(client))
+                continue;
             if(client.getClientState() == state) client.sendPacket(packet);
         }
     }

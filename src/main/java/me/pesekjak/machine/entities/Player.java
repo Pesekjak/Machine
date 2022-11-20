@@ -15,6 +15,7 @@ import me.pesekjak.machine.network.ClientConnection;
 import me.pesekjak.machine.network.packets.PacketOut;
 import me.pesekjak.machine.network.packets.out.play.*;
 import me.pesekjak.machine.network.packets.out.play.PacketPlayOutGameEvent.Event;
+import me.pesekjak.machine.network.packets.out.play.PacketPlayOutSynchronizePlayerPosition.TeleportFlags;
 import me.pesekjak.machine.server.NBTSerializable;
 import me.pesekjak.machine.server.PlayerManager;
 import me.pesekjak.machine.server.codec.Codec;
@@ -33,6 +34,7 @@ import org.jglrxavpok.hephaistos.nbt.mutable.MutableNBTCompound;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -64,6 +66,13 @@ public class Player extends LivingEntity implements Audience, NBTSerializable {
     private Component displayName;
     @Getter
     private Component playerListName;
+
+    @Getter
+    private int teleportId = 0;
+    @Getter @Setter
+    private boolean teleporting = false;
+    @Getter @Setter
+    private Location teleportLocation;
 
     private Player(Machine server, @NotNull PlayerProfile profile, @NotNull ClientConnection connection) {
         super(server, EntityType.PLAYER, profile.getUuid());
@@ -168,7 +177,7 @@ public class Player extends LivingEntity implements Audience, NBTSerializable {
         // Level Chunk With Light (One sent for each chunk in a square centered on the player's position)
         // World Border (Once the world is finished loading)
         sendWorldSpawnChange(getWorld().getWorldSpawn());
-        // Player Position (Required, tells the client they're ready to spawn)
+        synchronizePosition(getLocation(), Collections.emptySet(), false);
         // Inventory, entities, etc
         sendGamemodeChange(gamemode);
         getWorld().loadPlayer(this);
@@ -246,6 +255,64 @@ public class Player extends LivingEntity implements Audience, NBTSerializable {
 
     private void sendGamemodeChange(Gamemode gamemode) {
         sendPacket(new PacketPlayOutGameEvent(Event.CHANGE_GAMEMODE, gamemode.getId()));
+    }
+
+    public void synchronizePosition(Location location, Set<TeleportFlags> flags, boolean dismountVehicle) {
+        teleporting = true;
+
+        double x = location.getX() - (flags.contains(TeleportFlags.X) ? getLocation().getX() : 0d);
+        double y = location.getY() - (flags.contains(TeleportFlags.Y) ? getLocation().getY() : 0d);
+        double z = location.getZ() - (flags.contains(TeleportFlags.Z) ? getLocation().getZ() : 0d);
+        float yaw = location.getYaw() - (flags.contains(TeleportFlags.YAW) ? getLocation().getYaw() : 0f);
+        float pitch = location.getPitch() - (flags.contains(TeleportFlags.PITCH) ? getLocation().getPitch() : 0f);
+
+        teleportLocation = new Location(x, y, z, yaw, pitch, null);
+        if (++teleportId == Integer.MAX_VALUE)
+            teleportId = 0;
+
+        sendPacket(new PacketPlayOutSynchronizePlayerPosition(location, flags, teleportId, dismountVehicle));
+    }
+
+    public void handleMovement(Location location, boolean onGround) throws IOException {
+        if (teleporting)
+            return;
+
+        handleOnGround(onGround);
+        Location currentLocation = getLocation();
+
+        double deltaX = Math.abs(location.getX() - currentLocation.getX());
+        double deltaY = Math.abs(location.getY() - currentLocation.getY());
+        double deltaZ = Math.abs(location.getZ() - currentLocation.getZ());
+        float deltaYaw = Math.abs(location.getYaw() - currentLocation.getYaw());
+        float deltaPitch = Math.abs(location.getPitch() - currentLocation.getPitch());
+
+        boolean positionChange = (deltaX + deltaY + deltaZ) > 0;
+        boolean rotationChange = (deltaYaw + deltaPitch) > 0;
+        if (!(positionChange || rotationChange))
+            return;
+
+        if (positionChange) {
+            if (deltaX > 8 || deltaY > 8 || deltaZ > 8)
+                getServer().getConnection().broadcastPacket(new PacketPlayOutTeleportEntity(getEntityId(), location, onGround), clientConnection -> clientConnection != getConnection());
+
+            if (rotationChange)
+                getServer().getConnection().broadcastPacket(new PacketPlayOutEntityPositionAndRotation(getEntityId(), currentLocation, location, onGround), clientConnection -> clientConnection != getConnection());
+            else
+                getServer().getConnection().broadcastPacket(new PacketPlayOutEntityPosition(getEntityId(), currentLocation, location, onGround), clientConnection -> clientConnection != getConnection());
+
+        } else {
+            getServer().getConnection().broadcastPacket(new PacketPlayOutEntityRotation(getEntityId(), location, onGround), clientConnection -> clientConnection != getConnection());
+        }
+
+        if (rotationChange) {
+            getServer().getConnection().broadcastPacket(new PacketPlayOutHeadRotation(getEntityId(), location.getYaw()), clientConnection -> clientConnection != getConnection());
+        }
+
+        setLocation(location);
+    }
+
+    public void handleOnGround(boolean onGround) {
+        setOnGround(onGround);
     }
 
     @Override
