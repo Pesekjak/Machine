@@ -177,7 +177,23 @@ public class Player extends LivingEntity implements Audience, NBTSerializable {
         // Level Chunk With Light (One sent for each chunk in a square centered on the player's position)
         // World Border (Once the world is finished loading)
         sendWorldSpawnChange(getWorld().getWorldSpawn());
+        getServer().getConnection().broadcastPacket(new PacketPlayOutSpawnPlayer(getEntityId(), getUuid(), getLocation()), connection -> {
+            if (connection.getOwner() != null && !getConnection().equals(connection))
+                return connection.getOwner().getWorld().equals(getWorld());
+            return false;
+        });
+        getServer().getConnection().broadcastPacket(new PacketPlayOutHeadRotation(getEntityId(), getLocation().getYaw()), connection -> {
+            if (connection.getOwner() != null && !getConnection().equals(connection))
+                return connection.getOwner().getWorld().equals(getWorld());
+            return false;
+        });
         synchronizePosition(getLocation(), Collections.emptySet(), false);
+        for (Player player : getServer().getEntityManager().getEntitiesOfClass(Player.class)) {
+            if (player == this)
+                continue;
+            sendPacket(new PacketPlayOutSpawnPlayer(player.getEntityId(), player.getUuid(), player.getLocation()));
+            sendPacket(new PacketPlayOutHeadRotation(player.getEntityId(), player.getLocation().getYaw()));
+        }
         // Inventory, entities, etc
         sendGamemodeChange(gamemode);
         getWorld().loadPlayer(this);

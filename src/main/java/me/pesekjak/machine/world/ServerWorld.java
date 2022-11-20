@@ -8,6 +8,7 @@ import me.pesekjak.machine.chunk.Chunk;
 import me.pesekjak.machine.chunk.ChunkUtils;
 import me.pesekjak.machine.entities.Entity;
 import me.pesekjak.machine.entities.Player;
+import me.pesekjak.machine.network.packets.out.play.PacketPlayOutRemoveEntities;
 import me.pesekjak.machine.utils.FileUtils;
 import me.pesekjak.machine.utils.NamespacedKey;
 import me.pesekjak.machine.world.blocks.BlockType;
@@ -128,6 +129,16 @@ public class ServerWorld extends World {
     @Override
     public void remove(Entity entity) {
         entityList.remove(entity);
+        try {
+            getServer().getConnection().broadcastPacket(new PacketPlayOutRemoveEntities(new int[]{entity.getEntityId()}), connection -> {
+                if (connection.getOwner() != null)
+                    return connection.getOwner().getWorld().equals(this);
+                return false;
+            });
+        }
+        catch (IOException e) {
+            getServer().getExceptionHandler().handle(e);
+        }
     }
 
     @Override
